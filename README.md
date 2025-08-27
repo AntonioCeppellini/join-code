@@ -38,8 +38,6 @@ Perfect for **pair programming**, **coding interviews**, **workshops/classrooms*
 
 ## Getting Started (local dev)
 
-**Prereqs:** Python 3.11+, Node 20+, Redis, PostgreSQL  
-*(Or run Redis/Postgres via Docker Compose.)*
 
 ```bash
 # 1) Clone
