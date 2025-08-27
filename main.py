@@ -196,11 +196,17 @@ class ConnectionManager:
     async def broadcast(self, room_id: str, data: dict):
         if room_id not in self.active_connections:
             return
-        for connection in self.active_connections[room_id]:
+        disconnected = []
+        for connection in list(self.active_connections[room_id]):
             try:
                 await connection.send_text(json.dumps(data))
-            except:
-                pass  # Connection potrebbe essere chiusa
+            except Exception:
+                # Connection could be closed or invalid; schedule cleanup
+                disconnected.append(connection)
+
+        for connection in disconnected:
+            # Remove stale connections to prevent memory leaks
+            self.disconnect(connection, room_id)
 
     def broadcast_sync(self, room_id: str, data: dict):
         import asyncio
