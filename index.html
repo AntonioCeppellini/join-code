@@ -1,0 +1,1294 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔥 Joincode - Collaborative Editor</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            display: flex;
+            height: 100vh;
+            background: linear-gradient(135deg, #1e1e2e 0%, #262637 100%);
+            color: #e0e6ed;
+            overflow: hidden;
+        }
+
+        /* Header */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background: linear-gradient(90deg, #2d2d44 0%, #3c3c5a 100%);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            z-index: 1000;
+            border-bottom: 2px solid #4c4c6d;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.3);
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .room-info {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .users-list {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .user-badge {
+            background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .user-badge.locked {
+            background: linear-gradient(45deg, #f093fb 0%, #f5576c 100%);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        /* Main Layout */
+        .main-container {
+            display: flex;
+            width: 100%;
+            height: calc(100vh - 60px);
+            margin-top: 60px;
+        }
+
+        .editor-section {
+            flex: 2.5;
+            display: flex;
+            flex-direction: column;
+            background: #1a1a2e;
+            border-right: 2px solid #4c4c6d;
+        }
+
+        .controls-bar {
+            background: linear-gradient(90deg, #252540 0%, #2a2a4a 100%);
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            border-bottom: 1px solid #4c4c6d;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            min-height: 36px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(45deg, #ff9a9e 0%, #fecfef 100%);
+            color: #333;
+        }
+
+        .btn-danger {
+            background: linear-gradient(45deg, #ff6b6b 0%, #ee5a52 100%);
+            color: white;
+        }
+
+        .btn-success {
+            background: linear-gradient(45deg, #56ab2f 0%, #a8e6cf 100%);
+            color: white;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status-indicator {
+            padding: 6px 12px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-indicator.read-only {
+            background: linear-gradient(45deg, #ffecd2 0%, #fcb69f 100%);
+            color: #8b4513;
+        }
+
+        .status-indicator.editing {
+            background: linear-gradient(45deg, #a8edea 0%, #fed6e3 100%);
+            color: #2c5282;
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes glow {
+            from { box-shadow: 0 0 5px rgba(168, 237, 234, 0.5); }
+            to { box-shadow: 0 0 20px rgba(254, 214, 227, 0.8); }
+        }
+
+        /* Import Controls */
+        .import-controls {
+            background: linear-gradient(90deg, #1f1f3a 0%, #2a2a4a 100%);
+            padding: 12px 20px;
+            border-bottom: 1px solid #4c4c6d;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .file-upload-label {
+            background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+        }
+
+        .file-upload-label:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .git-input {
+            background: rgba(255,255,255,0.1);
+            border: 2px solid transparent;
+            color: #e0e6ed;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .git-input:focus {
+            outline: none;
+            border-color: #667eea;
+            background: rgba(255,255,255,0.15);
+        }
+
+        .git-input::placeholder {
+            color: #9ca3af;
+        }
+
+        /* Editor */
+        .editor-wrapper {
+            flex: 1;
+            position: relative;
+        }
+
+        .CodeMirror {
+            height: 100% !important;
+            font-size: 16px;
+            font-family: 'Fira Code', 'Monaco', 'Menlo', monospace;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #16213e;
+            max-width: 400px;
+            min-width: 300px;
+        }
+
+        .sidebar-tabs {
+            display: flex;
+            background: #1f2937;
+        }
+
+        .sidebar-tab {
+            flex: 1;
+            padding: 12px;
+            background: transparent;
+            border: none;
+            color: #9ca3af;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+
+        .sidebar-tab.active {
+            background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .sidebar-tab:hover:not(.active) {
+            background: rgba(255,255,255,0.1);
+            color: #e0e6ed;
+        }
+
+        .sidebar-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Chat */
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+            background: #0f172a;
+        }
+
+        .chat-message {
+            margin-bottom: 12px;
+            padding: 8px 12px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            border-left: 3px solid #667eea;
+        }
+
+        .chat-message.own {
+            background: rgba(102, 126, 234, 0.1);
+            border-left-color: #4ecdc4;
+        }
+
+        .chat-message .user {
+            font-weight: bold;
+            color: #4ecdc4;
+            font-size: 12px;
+        }
+
+        .chat-message .timestamp {
+            font-size: 10px;
+            color: #6b7280;
+            float: right;
+        }
+
+        .chat-message .text {
+            margin-top: 4px;
+            line-height: 1.4;
+        }
+
+        .info-message {
+            background: rgba(59, 130, 246, 0.1);
+            border-left-color: #3b82f6;
+            font-style: italic;
+            color: #93c5fd;
+        }
+
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            border-left-color: #ef4444;
+            color: #fca5a5;
+        }
+
+        .chat-input-area {
+            padding: 15px;
+            background: #1f2937;
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input {
+            flex: 1;
+            background: rgba(255,255,255,0.1);
+            border: 2px solid transparent;
+            color: #e0e6ed;
+            padding: 10px 15px;
+            border-radius: 25px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .chat-input:focus {
+            outline: none;
+            border-color: #667eea;
+            background: rgba(255,255,255,0.15);
+        }
+
+        .send-btn {
+            background: linear-gradient(45deg, #4ecdc4 0%, #44a08d 100%);
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .send-btn:hover {
+            transform: scale(1.05);
+        }
+
+        /* Suggestions */
+        .suggestions-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            background: #0f172a;
+        }
+
+        .suggestions-header {
+            padding: 15px;
+            background: #1f2937;
+            border-bottom: 1px solid #374151;
+        }
+
+        .suggestions-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .suggestion-item {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-left: 4px solid #f59e0b;
+        }
+
+        .suggestion-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .suggestion-user {
+            font-weight: bold;
+            color: #f59e0b;
+        }
+
+        .suggestion-time {
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+        .suggestion-code {
+            background: #111827;
+            border-radius: 8px;
+            padding: 10px;
+            font-family: 'Fira Code', monospace;
+            font-size: 13px;
+            margin: 8px 0;
+            border: 1px solid #374151;
+        }
+
+        .suggestion-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .suggestion-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .suggestion-btn.accept {
+            background: #10b981;
+            color: white;
+        }
+
+        .suggestion-btn.reject {
+            background: #ef4444;
+            color: white;
+        }
+
+        .suggestion-form {
+            padding: 15px;
+            background: #1f2937;
+            border-top: 1px solid #374151;
+        }
+
+        .suggestion-textarea {
+            width: 100%;
+            background: rgba(255,255,255,0.1);
+            border: 2px solid transparent;
+            color: #e0e6ed;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: 'Fira Code', monospace;
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .suggestion-textarea:focus {
+            outline: none;
+            border-color: #f59e0b;
+            background: rgba(255,255,255,0.15);
+        }
+
+        /* Loading states */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            color: #6b7280;
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #374151;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+            }
+
+            .editor-section {
+                flex: 1;
+                min-height: 60vh;
+            }
+
+            .sidebar {
+                flex: 1;
+                max-width: none;
+                min-height: 40vh;
+            }
+
+            .controls-bar,
+            .import-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .btn {
+                justify-content: center;
+                margin-bottom: 5px;
+            }
+        }
+
+        /* Notifications */
+        .notification {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+            z-index: 1001;
+            transform: translateX(400px);
+            transition: all 0.3s ease;
+        }
+
+        .notification.show {
+            transform: translateX(0);
+        }
+
+        .notification.error {
+            background: linear-gradient(45deg, #ef4444 0%, #dc2626 100%);
+        }
+
+        .notification.success {
+            background: linear-gradient(45deg, #10b981 0%, #059669 100%);
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <div class="logo">🔥 Joincode</div>
+        <div class="room-info">
+            <div class="users-list" id="users-list">
+                <i class="fas fa-users"></i>
+            </div>
+            <div id="room-name">Connessione...</div>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Editor Section -->
+        <div class="editor-section">
+            <!-- Controls Bar -->
+            <div class="controls-bar">
+                <button class="btn btn-primary" id="request-lock-btn">
+                    <i class="fas fa-lock"></i> Richiedi Lock
+                </button>
+                <button class="btn btn-danger" id="release-lock-btn" disabled>
+                    <i class="fas fa-unlock"></i> Rilascia Lock
+                </button>
+                <div class="status-indicator read-only" id="status-indicator">
+                    <i class="fas fa-eye"></i>
+                    <span id="status-text">Sola lettura</span>
+                </div>
+            </div>
+
+            <!-- Import Controls -->
+            <div class="import-controls" id="import-controls">
+                <label class="file-upload-label" for="file-upload">
+                    <i class="fas fa-upload"></i> Carica File
+                </label>
+                <input type="file" id="file-upload" accept=".py,.js,.html,.css,.java,.cpp,.c,.php,.rb,.go,.rs,.ts,.json,.xml,.md,.txt">
+                
+                <span style="margin: 0 10px; color: #6b7280;">|</span>
+                
+                <input type="text" class="git-input" id="git-repo-url" placeholder="URL repository .git (https://...)">
+                <input type="text" class="git-input" id="git-file-path" placeholder="Percorso file (es. src/main.py)">
+                <button class="btn btn-secondary" id="git-clone-btn">
+                    <i class="fab fa-git-alt"></i> Clona da Git
+                </button>
+            </div>
+
+            <!-- Editor -->
+            <div class="editor-wrapper">
+                <textarea id="editor"></textarea>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <!-- Sidebar Tabs -->
+            <div class="sidebar-tabs">
+                <button class="sidebar-tab active" data-tab="chat">
+                    <i class="fas fa-comments"></i> Chat
+                </button>
+                <button class="sidebar-tab" data-tab="suggestions">
+                    <i class="fas fa-lightbulb"></i> Suggerimenti
+                </button>
+            </div>
+
+            <!-- Sidebar Content -->
+            <div class="sidebar-content">
+                <!-- Chat Tab -->
+                <div class="chat-container" id="chat-tab">
+                    <div class="chat-messages" id="chat-messages"></div>
+                    <div class="chat-input-area">
+                        <input type="text" class="chat-input" id="chat-input" placeholder="Scrivi un messaggio...">
+                        <button class="send-btn" id="send-chat-btn">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Suggestions Tab -->
+                <div class="suggestions-container" id="suggestions-tab" style="display: none;">
+                    <div class="suggestions-header">
+                        <h3><i class="fas fa-lightbulb"></i> Suggerimenti</h3>
+                        <p style="font-size: 12px; color: #6b7280; margin-top: 5px;">
+                            Proponi modifiche quando non hai il lock
+                        </p>
+                    </div>
+                    
+                    <div class="suggestions-list" id="suggestions-list">
+                        <div class="loading" id="suggestions-loading">
+                            <div class="spinner"></div>
+                            Nessun suggerimento
+                        </div>
+                    </div>
+
+                    <!-- Form per nuovo suggerimento -->
+                    <div class="suggestion-form" id="suggestion-form" style="display: none;">
+                        <textarea class="suggestion-textarea" id="suggestion-text" placeholder="Scrivi il tuo suggerimento qui..."></textarea>
+                        <div style="margin-top: 10px; display: flex; gap: 10px;">
+                            <button class="btn btn-success" id="submit-suggestion-btn">
+                                <i class="fas fa-plus"></i> Invia Suggerimento
+                            </button>
+                            <button class="btn btn-secondary" id="cancel-suggestion-btn">
+                                <i class="fas fa-times"></i> Annulla
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Pulsante per creare suggerimento -->
+                    <div style="padding: 15px; background: #1f2937; border-top: 1px solid #374151;">
+                        <button class="btn btn-primary" id="create-suggestion-btn" style="width: 100%;" disabled>
+                            <i class="fas fa-plus"></i> Crea Suggerimento
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Container -->
+    <div id="notification-container"></div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/php/php.min.js"></script>
+
+    <script>
+        class JoincodeApp {
+            constructor() {
+                this.ws = null;
+                this.hasLock = false;
+                this.roomId = null;
+                this.userId = null;
+                this.editor = null;
+                this.currentTab = 'chat';
+                this.suggestions = new Map();
+                this.isConnected = false;
+
+                this.initializeElements();
+                this.initializeEditor();
+                this.setupEventListeners();
+                this.connect();
+            }
+
+            initializeElements() {
+                // Buttons
+                this.requestLockBtn = document.getElementById('request-lock-btn');
+                this.releaseLockBtn = document.getElementById('release-lock-btn');
+                this.gitCloneBtn = document.getElementById('git-clone-btn');
+                this.sendChatBtn = document.getElementById('send-chat-btn');
+                this.createSuggestionBtn = document.getElementById('create-suggestion-btn');
+                this.submitSuggestionBtn = document.getElementById('submit-suggestion-btn');
+                this.cancelSuggestionBtn = document.getElementById('cancel-suggestion-btn');
+
+                // Inputs
+                this.fileUploadInput = document.getElementById('file-upload');
+                this.gitRepoUrlInput = document.getElementById('git-repo-url');
+                this.gitFilePathInput = document.getElementById('git-file-path');
+                this.chatInput = document.getElementById('chat-input');
+                this.suggestionTextarea = document.getElementById('suggestion-text');
+
+                // Containers
+                this.statusIndicator = document.getElementById('status-indicator');
+                this.statusText = document.getElementById('status-text');
+                this.importControls = document.getElementById('import-controls');
+                this.chatMessages = document.getElementById('chat-messages');
+                this.suggestionsList = document.getElementById('suggestions-list');
+                this.suggestionForm = document.getElementById('suggestion-form');
+                this.usersListEl = document.getElementById('users-list');
+                this.roomNameEl = document.getElementById('room-name');
+
+                // Tabs
+                this.sidebarTabs = document.querySelectorAll('.sidebar-tab');
+                this.chatTab = document.getElementById('chat-tab');
+                this.suggestionsTab = document.getElementById('suggestions-tab');
+            }
+
+            initializeEditor() {
+                this.editor = CodeMirror.fromTextArea(document.getElementById('editor'), {
+                    lineNumbers: true,
+                    mode: 'python',
+                    theme: 'material-darker',
+                    readOnly: true,
+                    lineWrapping: true,
+                    autoCloseBrackets: true,
+                    matchBrackets: true,
+                    indentUnit: 4,
+                    smartIndent: true,
+                    electricChars: true
+                });
+
+                // Event listener per modifiche dell'editor
+                this.editor.on('change', (instance, change) => {
+                    if (this.hasLock && change.origin !== 'setValue' && this.isConnected) {
+                        this.sendMessage({
+                            type: 'code_update',
+                            content: instance.getValue()
+                        });
+                    }
+                });
+            }
+
+            setupEventListeners() {
+                // Lock controls
+                this.requestLockBtn.addEventListener('click', () => {
+                    this.sendMessage({ type: 'request_lock' });
+                });
+
+                this.releaseLockBtn.addEventListener('click', () => {
+                    this.sendMessage({ type: 'release_lock' });
+                });
+
+                // File upload
+                this.fileUploadInput.addEventListener('change', (event) => {
+                    this.handleFileUpload(event);
+                });
+
+                // Git clone
+                this.gitCloneBtn.addEventListener('click', () => {
+                    this.handleGitClone();
+                });
+
+                // Chat
+                this.sendChatBtn.addEventListener('click', () => {
+                    this.sendChatMessage();
+                });
+
+                this.chatInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        this.sendChatMessage();
+                    }
+                });
+
+                // Suggestions
+                this.createSuggestionBtn.addEventListener('click', () => {
+                    this.showSuggestionForm();
+                });
+
+                this.submitSuggestionBtn.addEventListener('click', () => {
+                    this.submitSuggestion();
+                });
+
+                this.cancelSuggestionBtn.addEventListener('click', () => {
+                    this.hideSuggestionForm();
+                });
+
+                // Sidebar tabs
+                this.sidebarTabs.forEach(tab => {
+                    tab.addEventListener('click', () => {
+                        this.switchTab(tab.dataset.tab);
+                    });
+                });
+
+                // Detect file type for syntax highlighting
+                this.fileUploadInput.addEventListener('change', () => {
+                    const file = this.fileUploadInput.files[0];
+                    if (file) {
+                        this.setEditorMode(file.name);
+                    }
+                });
+            }
+
+            setEditorMode(filename) {
+                const extension = filename.split('.').pop().toLowerCase();
+                const modeMap = {
+                    'py': 'python',
+                    'js': 'javascript',
+                    'ts': 'javascript',
+                    'html': 'htmlmixed',
+                    'css': 'css',
+                    'java': 'clike',
+                    'cpp': 'clike',
+                    'c': 'clike',
+                    'php': 'php',
+                    'rb': 'ruby',
+                    'go': 'go',
+                    'rs': 'rust',
+                    'json': 'javascript',
+                    'xml': 'xml'
+                };
+
+                const mode = modeMap[extension] || 'text';
+                this.editor.setOption('mode', mode);
+            }
+
+            connect() {
+                // Get room and user info
+                this.roomId = this.getRoomFromUrl() || prompt("Inserisci il codice della stanza:", "demo");
+                this.userId = localStorage.getItem('joincode_username') || prompt("Inserisci il tuo nome utente:", `User_${Math.floor(Math.random() * 1000)}`);
+                
+                if (this.userId) {
+                    localStorage.setItem('joincode_username', this.userId);
+                }
+
+                if (!this.roomId || !this.userId) {
+                    this.showNotification('Devi inserire sia il codice stanza che il nome utente', 'error');
+                    return;
+                }
+
+                // Update URL
+                if (!this.getRoomFromUrl()) {
+                    history.pushState({}, '', `/${this.roomId}`);
+                }
+
+                // Connect via WebSocket
+                const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${wsProtocol}//${window.location.host}/ws/${this.roomId}/${this.userId}`;
+                
+                this.ws = new WebSocket(wsUrl);
+                this.setupWebSocketHandlers();
+            }
+
+            getRoomFromUrl() {
+                const path = window.location.pathname;
+                return path.length > 1 ? path.substring(1) : null;
+            }
+
+            setupWebSocketHandlers() {
+                this.ws.onopen = () => {
+                    this.isConnected = true;
+                    this.roomNameEl.textContent = `Stanza: ${this.roomId}`;
+                    this.showNotification('Connesso alla stanza!', 'success');
+                };
+
+                this.ws.onclose = () => {
+                    this.isConnected = false;
+                    this.roomNameEl.textContent = 'Disconnesso';
+                    this.showNotification('Connessione persa. Tentativo di riconnessione...', 'error');
+                    
+                    // Riconnessione automatica
+                    setTimeout(() => {
+                        if (!this.isConnected) {
+                            this.connect();
+                        }
+                    }, 3000);
+                };
+
+                this.ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    this.showNotification('Errore di connessione', 'error');
+                };
+
+                this.ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        this.handleMessage(data);
+                    } catch (error) {
+                        console.error('Error parsing message:', error);
+                    }
+                };
+            }
+
+            handleMessage(data) {
+                switch (data.type) {
+                    case 'sync':
+                        this.syncContent(data.content);
+                        break;
+                    case 'lock_granted':
+                        this.setLockState(true);
+                        break;
+                    case 'lock_denied':
+                        this.showNotification('Lock negato: qualcun altro sta già modificando', 'error');
+                        break;
+                    case 'lock_released':
+                        this.setLockState(false);
+                        break;
+                    case 'chat_message':
+                        this.addChatMessage(data.user, data.message, data.timestamp, data.user === this.userId);
+                        break;
+                    case 'user_joined':
+                    case 'user_left':
+                        this.updateUsersList(data.users);
+                        this.addInfoMessage(data.message);
+                        break;
+                    case 'info':
+                        this.addInfoMessage(data.message);
+                        break;
+                    case 'error':
+                        this.showNotification(data.message, 'error');
+                        break;
+                    case 'suggestion':
+                        this.addSuggestion(data);
+                        break;
+                    case 'suggestion_handled':
+                        this.handleSuggestionResponse(data);
+                        break;
+                }
+            }
+
+            syncContent(content) {
+                const cursorPos = this.editor.getCursor();
+                this.editor.setValue(content);
+                this.editor.setCursor(cursorPos);
+            }
+
+            setLockState(hasLock) {
+                this.hasLock = hasLock;
+                this.editor.setOption("readOnly", !hasLock);
+                
+                this.requestLockBtn.disabled = hasLock;
+                this.releaseLockBtn.disabled = !hasLock;
+                
+                // Update status indicator
+                if (hasLock) {
+                    this.statusIndicator.className = 'status-indicator editing';
+                    this.statusText.innerHTML = '<i class="fas fa-edit"></i> Modalità Scrittura';
+                } else {
+                    this.statusIndicator.className = 'status-indicator read-only';
+                    this.statusText.innerHTML = '<i class="fas fa-eye"></i> Sola lettura';
+                }
+                
+                // Enable/disable import controls
+                this.importControls.style.pointerEvents = hasLock ? 'auto' : 'none';
+                this.importControls.style.opacity = hasLock ? '1' : '0.5';
+                
+                // Enable/disable suggestion creation
+                this.createSuggestionBtn.disabled = hasLock;
+            }
+
+            handleFileUpload(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+                
+                if (file.size > 10 * 1024 * 1024) { // 10MB limit
+                    this.showNotification('File troppo grande (max 10MB)', 'error');
+                    return;
+                }
+                
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    this.sendMessage({
+                        type: 'file_upload',
+                        content: e.target.result,
+                        filename: file.name
+                    });
+                    this.setEditorMode(file.name);
+                };
+                reader.readAsText(file);
+                event.target.value = ''; // Reset input
+            }
+
+            handleGitClone() {
+                const repoUrl = this.gitRepoUrlInput.value.trim();
+                const filePath = this.gitFilePathInput.value.trim();
+                
+                if (!repoUrl || !filePath) {
+                    this.showNotification('Inserisci URL repository e percorso file', 'error');
+                    return;
+                }
+                
+                this.sendMessage({
+                    type: 'git_clone',
+                    repo_url: repoUrl,
+                    file_path: filePath
+                });
+                
+                this.setEditorMode(filePath);
+            }
+
+            sendChatMessage() {
+                const message = this.chatInput.value.trim();
+                if (!message) return;
+                
+                this.sendMessage({
+                    type: 'chat_message',
+                    message: message
+                });
+                
+                this.chatInput.value = '';
+            }
+
+            addChatMessage(user, message, timestamp, isOwn = false) {
+                const messageEl = document.createElement('div');
+                messageEl.className = `chat-message ${isOwn ? 'own' : ''}`;
+                
+                const timeStr = timestamp ? new Date(timestamp).toLocaleTimeString('it-IT', { 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                }) : '';
+                
+                messageEl.innerHTML = `
+                    <div class="user">${user}</div>
+                    <div class="timestamp">${timeStr}</div>
+                    <div class="text">${this.escapeHtml(message)}</div>
+                `;
+                
+                this.chatMessages.appendChild(messageEl);
+                this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+                
+                // Switch to chat tab if message received and not already on chat
+                if (!isOwn && this.currentTab !== 'chat') {
+                    this.highlightTab('chat');
+                }
+            }
+
+            addInfoMessage(message) {
+                const messageEl = document.createElement('div');
+                messageEl.className = 'chat-message info-message';
+                messageEl.innerHTML = `<div class="text"><i class="fas fa-info-circle"></i> ${this.escapeHtml(message)}</div>`;
+                
+                this.chatMessages.appendChild(messageEl);
+                this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+            }
+
+            showSuggestionForm() {
+                this.suggestionForm.style.display = 'block';
+                this.suggestionTextarea.focus();
+            }
+
+            hideSuggestionForm() {
+                this.suggestionForm.style.display = 'none';
+                this.suggestionTextarea.value = '';
+            }
+
+            submitSuggestion() {
+                const suggestion = this.suggestionTextarea.value.trim();
+                if (!suggestion) {
+                    this.showNotification('Inserisci un suggerimento', 'error');
+                    return;
+                }
+                
+                // Get current selection or cursor position
+                const selection = this.editor.getSelection();
+                const cursor = this.editor.getCursor();
+                
+                this.sendMessage({
+                    type: 'create_suggestion',
+                    line_start: cursor.line,
+                    line_end: cursor.line,
+                    original_code: selection || this.editor.getLine(cursor.line),
+                    suggested_code: suggestion
+                });
+                
+                this.hideSuggestionForm();
+                this.showNotification('Suggerimento inviato!', 'success');
+            }
+
+            addSuggestion(suggestionData) {
+                this.suggestions.set(suggestionData.id, suggestionData);
+                this.renderSuggestions();
+                
+                // Highlight suggestions tab
+                this.highlightTab('suggestions');
+            }
+
+            renderSuggestions() {
+                const suggestionsArray = Array.from(this.suggestions.values());
+                
+                if (suggestionsArray.length === 0) {
+                    this.suggestionsList.innerHTML = `
+                        <div class="loading">
+                            <i class="fas fa-lightbulb"></i>
+                            Nessun suggerimento
+                        </div>
+                    `;
+                    return;
+                }
+                
+                this.suggestionsList.innerHTML = suggestionsArray
+                    .filter(s => s.status === 'pending')
+                    .map(suggestion => this.renderSuggestion(suggestion))
+                    .join('');
+            }
+
+            renderSuggestion(suggestion) {
+                const canHandle = this.hasLock;
+                
+                return `
+                    <div class="suggestion-item" data-suggestion-id="${suggestion.id}">
+                        <div class="suggestion-header">
+                            <div class="suggestion-user">${this.escapeHtml(suggestion.user)}</div>
+                            <div class="suggestion-time">Linea ${suggestion.line_start + 1}</div>
+                        </div>
+                        
+                        <div style="margin: 10px 0;">
+                            <div style="font-size: 12px; color: #6b7280; margin-bottom: 5px;">Originale:</div>
+                            <div class="suggestion-code">${this.escapeHtml(suggestion.original_code)}</div>
+                        </div>
+                        
+                        <div style="margin: 10px 0;">
+                            <div style="font-size: 12px; color: #6b7280; margin-bottom: 5px;">Suggerimento:</div>
+                            <div class="suggestion-code">${this.escapeHtml(suggestion.suggested_code)}</div>
+                        </div>
+                        
+                        ${canHandle ? `
+                            <div class="suggestion-actions">
+                                <button class="suggestion-btn accept" onclick="app.handleSuggestion(${suggestion.id}, 'accept', '${suggestion.suggested_code.replace(/'/g, "\\'")}')">
+                                    <i class="fas fa-check"></i> Accetta
+                                </button>
+                                <button class="suggestion-btn reject" onclick="app.handleSuggestion(${suggestion.id}, 'reject')">
+                                    <i class="fas fa-times"></i> Rifiuta
+                                </button>
+                            </div>
+                        ` : `
+                            <div style="font-size: 12px; color: #6b7280; font-style: italic;">
+                                In attesa di approvazione...
+                            </div>
+                        `}
+                    </div>
+                `;
+            }
+
+            handleSuggestion(suggestionId, action, suggestedCode = '') {
+                this.sendMessage({
+                    type: 'handle_suggestion',
+                    suggestion_id: suggestionId,
+                    action: action,
+                    suggested_code: suggestedCode
+                });
+                
+                // If accepted, apply the suggestion to the editor
+                if (action === 'accept' && this.hasLock) {
+                    const suggestion = this.suggestions.get(suggestionId);
+                    if (suggestion) {
+                        // Simple implementation: replace the line
+                        const cursor = { line: suggestion.line_start, ch: 0 };
+                        this.editor.setSelection(
+                            { line: suggestion.line_start, ch: 0 },
+                            { line: suggestion.line_end + 1, ch: 0 }
+                        );
+                        this.editor.replaceSelection(suggestedCode + '\n');
+                    }
+                }
+            }
+
+            handleSuggestionResponse(data) {
+                this.suggestions.delete(data.suggestion_id);
+                this.renderSuggestions();
+                this.addInfoMessage(data.message);
+            }
+
+            switchTab(tabName) {
+                this.currentTab = tabName;
+                
+                // Update tab buttons
+                this.sidebarTabs.forEach(tab => {
+                    tab.classList.toggle('active', tab.dataset.tab === tabName);
+                });
+                
+                // Show/hide tab content
+                this.chatTab.style.display = tabName === 'chat' ? 'flex' : 'none';
+                this.suggestionsTab.style.display = tabName === 'suggestions' ? 'flex' : 'none';
+                
+                // Remove highlight
+                this.removeTabHighlight(tabName);
+            }
+
+            highlightTab(tabName) {
+                if (this.currentTab !== tabName) {
+                    const tab = document.querySelector(`[data-tab="${tabName}"]`);
+                    if (tab && !tab.classList.contains('highlight')) {
+                        tab.style.animation = 'pulse 2s infinite';
+                        tab.classList.add('highlight');
+                    }
+                }
+            }
+
+            removeTabHighlight(tabName) {
+                const tab = document.querySelector(`[data-tab="${tabName}"]`);
+                if (tab) {
+                    tab.style.animation = '';
+                    tab.classList.remove('highlight');
+                }
+            }
+
+            updateUsersList(users) {
+                if (!users || users.length === 0) return;
+                
+                this.usersListEl.innerHTML = `
+                    <i class="fas fa-users"></i>
+                    ${users.map(user => `
+                        <span class="user-badge ${user === this.userId ? 'locked' : ''}">${this.escapeHtml(user)}</span>
+                    `).join('')}
+                `;
+            }
+
+            showNotification(message, type = 'info') {
+                const notification = document.createElement('div');
+                notification.className = `notification ${type}`;
+                notification.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <i class="fas fa-${type === 'error' ? 'exclamation-triangle' : type === 'success' ? 'check-circle' : 'info-circle'}"></i>
+                        <span>${this.escapeHtml(message)}</span>
+                    </div>
+                `;
+                
+                document.getElementById('notification-container').appendChild(notification);
+                
+                // Show notification
+                setTimeout(() => notification.classList.add('show'), 100);
+                
+                // Auto remove
+                setTimeout(() => {
+                    notification.classList.remove('show');
+                    setTimeout(() => notification.remove(), 300);
+                }, 4000);
+            }
+
+            sendMessage(data) {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    this.ws.send(JSON.stringify(data));
+                }
+            }
+
+            escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+        }
+
+        // Initialize the app
+        const app = new JoincodeApp();
+        
+        // Make app globally accessible for onclick handlers
+        window.app = app;
+    </script>
+</body>
+</html>
