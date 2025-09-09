@@ -3,20 +3,11 @@ import Editor from "@monaco-editor/react";
 import Suggestions from "./Suggestions.jsx";
 
 /**
- * Code editor component with:
- * - app-level handshake: handles "ready" (initial snapshot from server)
- * - real-time updates: applies "code" broadcasts
- * - turn-taking: respects "turn_update" (who can edit)
- * - suggestions: visible only to current editor (can be adjusted)
- *
- * Props:
- *  - roomId, user
- *  - socket: native WebSocket instance (already connected)
- *  - send: function(payload) => safe send (queues while CONNECTING)
- *  - wsReady: boolean, OPEN state of the websocket
- *  - files: [{ path, content }]
- *  - currentFile: string
- *  - setFiles: (updater) => void
+ * Code editor with:
+ * - "ready" snapshot on join
+ * - turn-taking with approval (request_turn / approve_turn / deny_turn)
+ * - code real-time updates
+ * - suggestions visible to current editor
  */
 export default function CodeEditor({
   roomId,
@@ -28,9 +19,10 @@ export default function CodeEditor({
   currentFile,
   setFiles,
 }) {
-  const [editor, setEditor] = useState(null); // current editor username
+  const [editor, setEditor] = useState(null);       // username of current editor
   const [suggestions, setSuggestions] = useState([]);
-  const initialisedRef = useRef(false); // avoid re-applying snapshot multiple times
+  const [requests, setRequests] = useState([]);     // pending turn requests (usernames)
+  const initialisedRef = useRef(false);
 
   useEffect(() => {
     if (!socket) return;
@@ -38,44 +30,58 @@ export default function CodeEditor({
     const handleMessage = (event) => {
       const data = JSON.parse(event.data);
 
-      // 1) Server snapshot on join
       if (data.type === "ready") {
-        // Initialize local editor + file list from server
         setEditor(data.editor || null);
-
-        if (data.files && typeof data.files === "object") {
-          // Convert { "path": "content" } -> [{ path, content }]
-          const list = Object.entries(data.files).map(([path, content]) => ({
-            path,
-            content,
-          }));
-
-          // Apply snapshot only once on the first ready
-          if (!initialisedRef.current) {
-            setFiles(list);
-            initialisedRef.current = true;
-          }
+        if (data.files && typeof data.files === "object" && !initialisedRef.current) {
+          const list = Object.entries(data.files).map(([path, content]) => ({ path, content }));
+          setFiles(list);
+          initialisedRef.current = true;
         }
         return;
       }
 
-      // 2) Turn-taking updates
       if (data.type === "turn_update") {
         setEditor(data.editor);
+        // Clear processed requests if we became editor or editor changed
+        setRequests((prev) => prev.filter((u) => u !== data.editor));
         return;
       }
 
-      // 3) Code updates (apply to the relevant file)
+      if (data.type === "request_turn") {
+        // Only the current editor should see actionable requests
+        if (user.username === editor && !requests.includes(data.user)) {
+          setRequests((prev) => [...prev, data.user]);
+        }
+        // Small feedback for requester
+        if (data.user === user.username && user.username !== editor) {
+          // no-op or toast client-side
+        }
+        return;
+      }
+
+      if (data.type === "deny_turn" && data.user === user.username) {
+        // Editor denied our request → display a tiny toast/alert
+        // (simple alert for now)
+        alert("Your request to take the editor role has been denied.");
+        return;
+      }
+
       if (data.type === "code" && data.path) {
         setFiles((prev) =>
-          prev.map((f) =>
-            f.path === data.path ? { ...f, content: data.value } : f
-          )
+          prev.map((f) => (f.path === data.path ? { ...f, content: data.value } : f))
         );
         return;
       }
 
-      // 4) Suggestions (only shown to the active editor)
+      if (data.type === "file_create" && data.path) {
+        setFiles((prev) => {
+          const exists = prev.some((f) => f.path === data.path);
+          if (exists) return prev.map((f) => (f.path === data.path ? { ...f, content: data.content ?? "" } : f));
+          return [...prev, { path: data.path, content: data.content ?? "" }];
+        });
+        return;
+      }
+
       if (data.type === "suggestion" && editor === user.username) {
         setSuggestions((prev) => [...prev, data]);
         return;
@@ -84,23 +90,28 @@ export default function CodeEditor({
 
     socket.addEventListener("message", handleMessage);
     return () => socket.removeEventListener("message", handleMessage);
-  }, [socket, editor, user?.username, setFiles]);
+  }, [socket, editor, user?.username, setFiles, requests]);
 
-  // Local on-change: only the active editor can broadcast changes
   const onChange = (value) => {
     if (editor !== user.username || !currentFile) return;
-
-    // Optimistic local update
-    setFiles((prev) =>
-      prev.map((f) => (f.path === currentFile ? { ...f, content: value } : f))
-    );
-
-    // Broadcast to room
+    setFiles((prev) => prev.map((f) => (f.path === currentFile ? { ...f, content: value } : f)));
     send({ type: "code", path: currentFile, value });
   };
 
+  // Non-editor → request the turn
   const requestTurn = () => {
-    send({ type: "take_turn", user: user.username });
+    if (editor === user.username) return;
+    send({ type: "request_turn", user: user.username });
+  };
+
+  // Editor actions
+  const approveTurn = (username) => {
+    send({ type: "approve_turn", user: username });
+    setRequests((prev) => prev.filter((u) => u !== username));
+  };
+  const denyTurn = (username) => {
+    send({ type: "deny_turn", user: username });
+    setRequests((prev) => prev.filter((u) => u !== username));
   };
 
   const proposeChange = () => {
@@ -109,39 +120,43 @@ export default function CodeEditor({
     const content = file ? file.content : "";
     const suggestion = prompt("Enter your suggestion for this file:", content);
     if (suggestion) {
-      send({
-        type: "suggestion",
-        user: user.username,
-        path: currentFile,
-        value: suggestion,
-      });
+      send({ type: "suggestion", user: user.username, path: currentFile, value: suggestion });
     }
   };
 
-  const fileContent =
-    files.find((f) => f.path === currentFile)?.content ?? "";
+  const fileContent = files.find((f) => f.path === currentFile)?.content ?? "";
+  const isEditor = editor === user.username;
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      <div
-        style={{
-          padding: 8,
-          borderBottom: "1px solid #ddd",
-          display: "flex",
-          gap: 8,
-          alignItems: "center",
-        }}
-      >
+      <div style={{ padding: 8, borderBottom: "1px solid #ddd", display: "flex", gap: 8, alignItems: "center" }}>
         <strong>Room:</strong> <code>{roomId}</code>
         <span style={{ marginLeft: 12 }} />
         <strong>Current editor:</strong> <span>{editor || "—"}</span>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-          <button onClick={requestTurn} disabled={!wsReady}>
-            Request turn
-          </button>
-          <button onClick={proposeChange} disabled={!wsReady}>
-            Propose change
-          </button>
+
+        {/* Right side controls */}
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+          {/* Non-editor sees request/propose */}
+          {!isEditor && (
+            <>
+              <button onClick={requestTurn} disabled={!wsReady}>Request turn</button>
+              <button onClick={proposeChange} disabled={!wsReady}>Propose change</button>
+            </>
+          )}
+
+          {/* Editor sees pending requests with Accept/Deny */}
+          {isEditor && requests.length > 0 && (
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <span>Requests:</span>
+              {requests.map((u) => (
+                <span key={u} style={{ border: "1px solid #ddd", padding: "2px 6px", borderRadius: 6 }}>
+                  <strong>{u}</strong>{" "}
+                  <button onClick={() => approveTurn(u)} disabled={!wsReady}>Accept</button>{" "}
+                  <button onClick={() => denyTurn(u)} disabled={!wsReady}>Deny</button>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -152,7 +167,7 @@ export default function CodeEditor({
           value={fileContent}
           onChange={onChange}
           options={{
-            readOnly: editor !== user.username || !wsReady,
+            readOnly: !isEditor || !wsReady,
             minimap: { enabled: false },
             fontSize: 14,
           }}
@@ -164,15 +179,8 @@ export default function CodeEditor({
           suggestions={suggestions}
           clear={() => setSuggestions([])}
           accept={(s) => {
-            // Only the active editor can accept and apply a suggestion
-            if (editor !== user.username) return;
-            if (s.path !== currentFile) return;
-
-            setFiles((prev) =>
-              prev.map((f) =>
-                f.path === s.path ? { ...f, content: s.value } : f
-              )
-            );
+            if (!isEditor || s.path !== currentFile) return;
+            setFiles((prev) => prev.map((f) => (f.path === s.path ? { ...f, content: s.value } : f)));
             send({ type: "code", path: s.path, value: s.value });
           }}
         />
