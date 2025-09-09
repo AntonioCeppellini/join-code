@@ -5,71 +5,54 @@ import FileExplorer from "./FileExplorer.jsx";
 import CodeEditor from "./Editor.jsx";
 import Chat from "./Chat.jsx";
 
-/** Compute WebSocket base URL:
- *  - Use VITE_WS_BASE if set (e.g. ws://backend:8000 in Docker).
- *  - Else derive from current origin (http->ws, https->wss).
- */
 export function getWsBase() {
   const envBase = import.meta.env.VITE_WS_BASE;
   if (envBase) return envBase.replace(/\/+$/, "");
+  if (import.meta.env.DEV) return "ws://localhost:8000";
   return window.location.origin.replace(/^http/, "ws");
 }
 
-/** Room layout: file explorer (left), editor (center), chat (right). */
 function Room({ user }) {
   const { roomId } = useParams();
   const [socket, setSocket] = useState(null);
   const [wsReady, setWsReady] = useState(false);
 
-  // Very small in-memory file model (one file by default)
   const [files, setFiles] = useState([{ path: "main.py", content: "" }]);
   const [currentFile, setCurrentFile] = useState("main.py");
 
-  // Queue for messages sent while the socket is not yet OPEN
   const pendingRef = useRef([]);
 
   useEffect(() => {
     if (!user) return;
-
-    const ws = new WebSocket(`${getWsBase()}/ws/${roomId}`);
+    const url = `${getWsBase()}/ws/${roomId}`;
+    const ws = new WebSocket(url);
 
     const onOpen = () => {
-      // Application-level join first
       ws.send(JSON.stringify({ type: "join", user: user.username }));
       setWsReady(true);
-
-      // Flush queued messages
-      for (const msg of pendingRef.current) ws.send(JSON.stringify(msg));
+      for (const m of pendingRef.current) ws.send(JSON.stringify(m));
       pendingRef.current = [];
     };
-
-    const onCloseOrErr = () => setWsReady(false);
+    const onDown = () => setWsReady(false);
 
     ws.addEventListener("open", onOpen);
-    ws.addEventListener("close", onCloseOrErr);
-    ws.addEventListener("error", onCloseOrErr);
+    ws.addEventListener("close", onDown);
+    ws.addEventListener("error", onDown);
 
     setSocket(ws);
     return () => {
       ws.removeEventListener("open", onOpen);
-      ws.removeEventListener("close", onCloseOrErr);
-      ws.removeEventListener("error", onCloseOrErr);
+      ws.removeEventListener("close", onDown);
+      ws.removeEventListener("error", onDown);
       ws.close();
     };
   }, [user, roomId]);
 
-  /** Safe sender:
-   *  - If OPEN, send immediately.
-   *  - Else enqueue; it will be flushed on 'open'.
-   */
   const safeSend = useCallback(
     (payload) => {
       if (!socket) return;
-      if (socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify(payload));
-      } else {
-        pendingRef.current.push(payload);
-      }
+      if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(payload));
+      else pendingRef.current.push(payload);
     },
     [socket]
   );
@@ -81,8 +64,11 @@ function Room({ user }) {
       <div style={{ flex: 2, borderRight: "1px solid #999" }}>
         <FileExplorer
           files={files}
+          setFiles={setFiles}
           currentFile={currentFile}
           setCurrentFile={setCurrentFile}
+          send={safeSend}
+          wsReady={wsReady}
         />
       </div>
 
