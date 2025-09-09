@@ -67,7 +67,7 @@ class ConnectionManager:
             self.rooms[doc_id] = {
                 "connections": [],
                 "current_editor": username,    # first join is the editor
-                "files": {"main.py": ""},      # minimal single-file snapshot
+                "files": {},      # minimal single-file snapshot
             }
 
         self.rooms[doc_id]["connections"].append(websocket)
