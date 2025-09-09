@@ -1,76 +1,21 @@
-version: '3.8'
+version: "3.8"
 
 services:
-  # Database PostgreSQL
-  postgres:
-    image: postgres:15-alpine
-    container_name: joincode_postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: joincode_db
-      POSTGRES_USER: joincode_user
-      POSTGRES_PASSWORD: joincode_password
-      POSTGRES_HOST_AUTH_METHOD: trust
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
-    ports:
-      - "5432:5432"
-    networks:
-      - joincode_network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U joincode_user -d joincode_db"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Applicazione Joincode
-  joincode_app:
-    build: 
-      context: .
-      dockerfile: Dockerfile
-    container_name: joincode_app
-    restart: unless-stopped
-    environment:
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=joincode_user
-      - DB_PASSWORD=joincode_password
-      - DB_NAME=joincode_db
+  backend:
+    build: ./backend
     ports:
       - "8000:8000"
     depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - joincode_network
-    volumes:
-      - ./:/app
-      - /tmp:/tmp
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
-
-  # Opzionale: pgAdmin per gestione database
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: joincode_pgadmin
-    restart: unless-stopped
+      - redis
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@joincode.local
-      PGADMIN_DEFAULT_PASSWORD: admin123
-      PGADMIN_LISTEN_PORT: 80
+      - REDIS_URL=${REDIS_URL}
+
+  frontend:
+    build: ./frontend
     ports:
-      - "8080:80"
+      - "3000:3000"
     depends_on:
-      - postgres
-    networks:
-      - joincode_network
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
+      - backend
 
-volumes:
-  postgres_data:
-  pgadmin_data:
-
-networks:
-  joincode_network:
-    driver: bridge
+  redis:
+    image: redis:7

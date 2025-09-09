@@ -1,0 +1,84 @@
+# -------------------------
+# OS junk
+# -------------------------
+.DS_Store
+Thumbs.db
+
+# -------------------------
+# Python / FastAPI backend
+# -------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.dylib
+*.egg-info/
+.eggs/
+build/
+dist/
+pip-wheel-metadata/
+venv/
+.venv/
+ENV/
+env/
+.mypy_cache/
+.pytest_cache/
+.pytype/
+.ruff_cache/
+.cache/
+.coverage
+.coverage.*
+htmlcov/
+logs/
+*.log
+uvicorn.log
+
+# Env files (keep only examples)
+.env
+.env.*
+!.env.example
+
+# -------------------------
+# Node / React (Vite) frontend
+# -------------------------
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.eslintcache
+frontend/.parcel-cache
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/pnpm-debug.log*
+
+# Frontend envs (keep only examples)
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+# Frontend coverage (if any)
+frontend/coverage/
+
+# -------------------------
+# Docker / Compose
+# -------------------------
+docker-compose.override.yml
+docker-data/
+*.pid
+
+# -------------------------
+# Redis (local dumps)
+# -------------------------
+dump.rdb
+appendonly.aof
+
+# -------------------------
+# Editors / IDEs / Swap
+# -------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
