@@ -17,8 +17,12 @@ function Room({ user }) {
   const [socket, setSocket] = useState(null);
   const [wsReady, setWsReady] = useState(false);
 
-  const [files, setFiles] = useState([{ path: "main.py", content: "" }]);
-  const [currentFile, setCurrentFile] = useState("main.py");
+  // ⬇️ start with NO files and NO current file
+  const [files, setFiles] = useState([]);
+  const [currentFile, setCurrentFile] = useState(null);
+
+  // expose who is the current editor (for FileExplorer toolbar visibility)
+  const [currentEditor, setCurrentEditor] = useState(null);
 
   const pendingRef = useRef([]);
 
@@ -59,6 +63,8 @@ function Room({ user }) {
 
   if (!user) return <div className="container">Please go back and enter your name first.</div>;
 
+  const isEditor = currentEditor === user.username;
+
   return (
     <div style={{ display: "flex", height: "100%" }}>
       <div style={{ flex: 2, borderRight: "1px solid #999" }}>
@@ -69,6 +75,7 @@ function Room({ user }) {
           setCurrentFile={setCurrentFile}
           send={safeSend}
           wsReady={wsReady}
+          isEditor={isEditor}
         />
       </div>
 
@@ -83,6 +90,8 @@ function Room({ user }) {
             files={files}
             currentFile={currentFile}
             setFiles={setFiles}
+            setCurrentFile={setCurrentFile}   // ⬅️ serve per selezionare il primo file dopo upload/crea
+            onEditorChange={setCurrentEditor}
           />
         )}
       </div>
